@@ -8,7 +8,6 @@ from rich.table import Table
 
 from dnstrace.models import TraceResult
 
-
 console = Console()
 
 
