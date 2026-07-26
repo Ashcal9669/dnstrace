@@ -23,6 +23,21 @@ def test_domain_file_extends_pool(tmp_path: Path) -> None:
     assert "example.org" in workload.domains
 
 
+def test_fresh_workload_adds_unique_labels() -> None:
+    workload = build_workload(3, seed=42, fresh=True, nonce="udp-vs-tcp")
+    assert workload.fresh is True
+    assert workload.nonce == "udp-vs-tcp"
+    assert workload.domains == [
+        f"dnstrace-udp-vs-tcp-{index}.{base}"
+        for index, base in enumerate(workload.base_domains)
+    ]
+
+
+def test_fresh_nonce_is_normalized() -> None:
+    workload = build_workload(1, fresh=True, nonce="Test Run #1")
+    assert workload.nonce == "test-run--1"
+
+
 def test_count_must_be_positive() -> None:
     with pytest.raises(ValueError):
         build_workload(0)
