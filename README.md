@@ -10,10 +10,12 @@ The current implementation includes:
 - UDP and TCP DNS queries
 - DNS-over-TLS with certificate verification, SNI, custom port, and TLS timeline events
 - DNS-over-HTTPS using RFC 8484 wire-format requests with HTTP/2 support
+- DNS-over-QUIC using RFC 9250 streams
+- DNS-over-HTTPS over HTTP/3 with an optional bootstrap address
 - per-query timelines and timing
 - concurrent execution
 - terminal and JSON output
-- a common transport interface ready for DoQ and DoH3
+- one transport interface across all six protocols
 
 ## Install
 
@@ -58,6 +60,27 @@ dnstrace trace \
   --random 20
 ```
 
+DNS-over-QUIC:
+
+```bash
+dnstrace trace \
+  --server 1.1.1.1 \
+  --transport doq \
+  --doq-server-name cloudflare-dns.com \
+  --random 20
+```
+
+DNS-over-HTTP/3:
+
+```bash
+dnstrace trace \
+  --server 1.1.1.1 \
+  --transport doh3 \
+  --doh3-url https://cloudflare-dns.com/dns-query \
+  --doh3-bootstrap 1.1.1.1 \
+  --random 20
+```
+
 Multiple transports in one workload:
 
 ```bash
@@ -67,20 +90,24 @@ dnstrace trace \
   --transport tcp \
   --transport dot \
   --transport doh \
+  --transport doq \
+  --transport doh3 \
   --dot-server-name cloudflare-dns.com \
   --doh-url https://cloudflare-dns.com/dns-query \
+  --doq-server-name cloudflare-dns.com \
+  --doh3-url https://cloudflare-dns.com/dns-query \
+  --doh3-bootstrap 1.1.1.1 \
   --random 20 \
   --json report.json
 ```
 
-`--insecure` disables TLS certificate verification and should only be used against development resolvers with self-signed certificates.
+`--insecure` disables certificate verification for DoT, DoH, DoQ, and DoH3. Use it only against development resolvers with self-signed certificates.
 
 ## Roadmap
 
-- DoQ
-- DoH3
 - recursive execution tracing
 - live TUI
 - resolver comparison and anomaly analysis
+- connection reuse and session-level timelines
 
 The project is under active development.
