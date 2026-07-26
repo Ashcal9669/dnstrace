@@ -12,7 +12,6 @@ from dnstrace.transports.dot import DoTTransport
 from dnstrace.transports.tcp import TCPTransport
 from dnstrace.transports.udp import UDPTransport
 
-
 TRANSPORTS: dict[str, type[Transport]] = {
     "udp": UDPTransport,
     "tcp": TCPTransport,
