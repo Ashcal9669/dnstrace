@@ -28,7 +28,20 @@ def trace(
     timeout: Annotated[float, typer.Option(min=0.1)] = 3.0,
     concurrency: Annotated[int, typer.Option(min=1)] = 20,
     domain_file: Annotated[Path | None, typer.Option(exists=True, dir_okay=False)] = None,
-    seed: Annotated[int | None, typer.Option(help="Repeatable workload seed")] = None,
+    seed: Annotated[int | None, typer.Option(help="Repeatable base-domain selection seed")] = None,
+    fresh: Annotated[
+        bool,
+        typer.Option(
+            "--fresh",
+            help="Prefix each selected domain with a unique label to avoid ordinary positive cache hits",
+        ),
+    ] = False,
+    fresh_nonce: Annotated[
+        str | None,
+        typer.Option(
+            help="Reuse the same cache-busting label across separate transport runs for comparison"
+        ),
+    ] = None,
     json_path: Annotated[Path | None, typer.Option("--json", dir_okay=False)] = None,
     dot_port: Annotated[int, typer.Option(min=1, max=65535)] = 853,
     dot_server_name: Annotated[
@@ -59,7 +72,21 @@ def trace(
 ) -> None:
     """Run a randomized resolver workload over selected transports."""
     selected_transports = transport or ["udp", "tcp"]
-    workload = build_workload(random_count, domain_file=domain_file, seed=seed)
+    workload = build_workload(
+        random_count,
+        domain_file=domain_file,
+        seed=seed,
+        fresh=fresh,
+        nonce=fresh_nonce,
+    )
+    if workload.fresh:
+        typer.echo(
+            f"Fresh workload nonce: {workload.nonce} "
+            "(unique labels reduce normal cache hits; RA still only proves recursion capability)"
+        )
+    else:
+        typer.echo("Cache state unknown; add --fresh when testing recursive resolution.")
+
     engine = TraceEngine(
         server=server,
         timeout=timeout,
