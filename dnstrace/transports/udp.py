@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import asyncio
-
 import dns.asyncquery
+import dns.exception
 import dns.flags
 import dns.message
 import dns.rcode
@@ -30,9 +29,9 @@ class UDPTransport(Transport):
             result.event("udp.receive", message_id=response.id)
             result.success = True
             result.rcode = dns.rcode.to_text(response.rcode())
-            result.flags = [name for bit, name in dns.flags._by_value.items() if response.flags & bit]
+            result.flags = dns.flags.to_text(response.flags).split()
             result.answers = [item.to_text() for rrset in response.answer for item in rrset]
-        except (asyncio.TimeoutError, OSError, dns.exception.DNSException) as exc:
+        except (TimeoutError, OSError, dns.exception.DNSException) as exc:
             result.error = f"{type(exc).__name__}: {exc}"
             result.event("query.error", error=result.error)
         finally:
