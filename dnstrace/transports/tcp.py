@@ -6,6 +6,7 @@ import dns.flags
 import dns.message
 import dns.rcode
 
+from dnstrace.dns_response import extract_answers
 from dnstrace.models import TraceResult
 from dnstrace.transports.base import Transport
 
@@ -29,7 +30,7 @@ class TCPTransport(Transport):
             result.success = True
             result.rcode = dns.rcode.to_text(response.rcode())
             result.flags = dns.flags.to_text(response.flags).split()
-            result.answers = [item.to_text() for rrset in response.answer for item in rrset]
+            result.answers = extract_answers(response, qtype)
         except (TimeoutError, OSError, dns.exception.DNSException) as exc:
             result.error = f"{type(exc).__name__}: {exc}"
             result.event("query.error", error=result.error)
