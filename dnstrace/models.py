@@ -24,6 +24,7 @@ class TraceResult:
     flags: list[str] = field(default_factory=list)
     answers: list[str] = field(default_factory=list)
     error: str | None = None
+    protocol: dict[str, Any] = field(default_factory=dict)
     events: list[TraceEvent] = field(default_factory=list)
     _started: float = field(default_factory=perf_counter, repr=False)
 
@@ -31,6 +32,9 @@ class TraceResult:
         self.events.append(
             TraceEvent(offset_ms=(perf_counter() - self._started) * 1000, name=name, detail=detail)
         )
+
+    def evidence(self, **details: Any) -> None:
+        self.protocol.update(details)
 
     def finish(self) -> None:
         self.elapsed_ms = (perf_counter() - self._started) * 1000
