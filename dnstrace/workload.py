@@ -4,7 +4,6 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 
-
 DEFAULT_DOMAINS = (
     "apple.com",
     "archive.org",
