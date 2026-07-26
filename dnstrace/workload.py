@@ -5,20 +5,11 @@ import re
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
-DEFAULT_DOMAINS = (
-    "apple.com",
-    "archive.org",
-    "cloudflare.com",
-    "debian.org",
-    "github.com",
-    "ietf.org",
-    "kernel.org",
-    "mozilla.org",
-    "python.org",
-    "reddit.com",
-    "wikipedia.org",
-)
+from tranco import Tranco
+
+TRANCO_SAMPLE_SIZE = 1_000_000
 
 
 @dataclass(slots=True)
@@ -27,6 +18,7 @@ class Workload:
     base_domains: list[str]
     fresh: bool = False
     nonce: str | None = None
+    source: str = "tranco"
 
 
 def _normalize_nonce(value: str) -> str:
@@ -36,6 +28,21 @@ def _normalize_nonce(value: str) -> str:
     return normalized[:32]
 
 
+def _load_domain_file(path: Path) -> list[str]:
+    return [
+        line.strip().lower().rstrip(".")
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def _load_tranco_domains(cache_dir: Path | None = None) -> list[str]:
+    target = cache_dir or Path.home() / ".cache" / "dnstrace" / "tranco"
+    target.mkdir(parents=True, exist_ok=True)
+    ranking = Tranco(cache=True, cache_dir=str(target)).list()
+    return ranking.top(TRANCO_SAMPLE_SIZE)
+
+
 def build_workload(
     count: int,
     domain_file: Path | None = None,
@@ -43,34 +50,36 @@ def build_workload(
     *,
     fresh: bool = False,
     nonce: str | None = None,
+    source_domains: Iterable[str] | None = None,
 ) -> Workload:
     if count < 1:
         raise ValueError("count must be at least 1")
 
-    pool = list(DEFAULT_DOMAINS)
-    if domain_file is not None:
-        loaded = [
-            line.strip().lower().rstrip(".")
-            for line in domain_file.read_text(encoding="utf-8").splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-        pool.extend(loaded)
+    if source_domains is not None:
+        pool = list(source_domains)
+        source = "provided"
+    elif domain_file is not None:
+        pool = _load_domain_file(domain_file)
+        source = str(domain_file)
+    else:
+        pool = _load_tranco_domains()
+        source = "Tranco latest top 1,000,000"
 
-    pool = sorted(set(pool))
+    pool = sorted({domain.strip().lower().rstrip(".") for domain in pool if domain.strip()})
     if not pool:
         raise ValueError("domain pool is empty")
+    if count > len(pool):
+        raise ValueError(f"requested {count} domains, but source only contains {len(pool)} unique domains")
 
-    rng = random.Random(seed)
-    if count <= len(pool):
-        base_domains = rng.sample(pool, count)
-    else:
-        base_domains = pool.copy()
-        rng.shuffle(base_domains)
-        while len(base_domains) < count:
-            base_domains.append(rng.choice(pool))
+    rng = random.Random(seed) if seed is not None else random.SystemRandom()
+    base_domains = rng.sample(pool, count)
 
     if not fresh:
-        return Workload(domains=base_domains.copy(), base_domains=base_domains)
+        return Workload(
+            domains=base_domains.copy(),
+            base_domains=base_domains,
+            source=source,
+        )
 
     fresh_nonce = _normalize_nonce(nonce or secrets.token_hex(6))
     domains = [f"dnstrace-{fresh_nonce}-{index}.{base}" for index, base in enumerate(base_domains)]
@@ -79,4 +88,5 @@ def build_workload(
         base_domains=base_domains,
         fresh=True,
         nonce=fresh_nonce,
+        source=source,
     )
