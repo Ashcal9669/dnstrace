@@ -22,6 +22,12 @@ def _recursion_flags(result: TraceResult) -> str:
     return "-"
 
 
+def _protocol_evidence(result: TraceResult) -> str:
+    if not result.protocol:
+        return "-"
+    return " ".join(f"{key}={value}" for key, value in result.protocol.items())
+
+
 def render_terminal(results: list[TraceResult]) -> None:
     table = Table(title="dnstrace")
     table.add_column("Domain")
@@ -29,6 +35,7 @@ def render_terminal(results: list[TraceResult]) -> None:
     table.add_column("Transport")
     table.add_column("Result")
     table.add_column("RD/RA")
+    table.add_column("Protocol Evidence")
     table.add_column("Time")
     table.add_column("Answer / Error")
 
@@ -42,6 +49,7 @@ def render_terminal(results: list[TraceResult]) -> None:
             result.transport.upper(),
             status or "-",
             _recursion_flags(result),
+            _protocol_evidence(result),
             elapsed,
             detail,
         )
@@ -49,7 +57,7 @@ def render_terminal(results: list[TraceResult]) -> None:
     console.print(table)
     console.print(
         "[dim]RD means the client requested recursion; RA means the resolver advertises recursive "
-        "service. These flags alone do not prove that a specific answer missed cache.[/dim]"
+        "service. Protocol Evidence shows only verified client-side transport metadata.[/dim]"
     )
 
 
