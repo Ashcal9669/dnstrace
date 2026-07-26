@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import ssl
 
 import dns.asyncquery
@@ -70,7 +69,7 @@ class DoTTransport(Transport):
             result.rcode = dns.rcode.to_text(response.rcode())
             result.flags = dns.flags.to_text(response.flags).split()
             result.answers = [item.to_text() for rrset in response.answer for item in rrset]
-        except (asyncio.TimeoutError, OSError, ssl.SSLError, dns.exception.DNSException) as exc:
+        except (TimeoutError, OSError, ssl.SSLError, dns.exception.DNSException) as exc:
             result.error = f"{type(exc).__name__}: {exc}"
             result.event("query.error", error=result.error)
         finally:
