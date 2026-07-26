@@ -22,13 +22,23 @@ def trace(
     ] = None,
     random_count: Annotated[
         int,
-        typer.Option("--random", min=1, help="Number of randomized domain queries"),
+        typer.Option("--random", min=1, help="Number of real websites selected at random"),
     ] = 10,
     qtype: Annotated[str, typer.Option(help="DNS record type")] = "A",
     timeout: Annotated[float, typer.Option(min=0.1)] = 3.0,
     concurrency: Annotated[int, typer.Option(min=1)] = 20,
-    domain_file: Annotated[Path | None, typer.Option(exists=True, dir_okay=False)] = None,
-    seed: Annotated[int | None, typer.Option(help="Repeatable base-domain selection seed")] = None,
+    domain_file: Annotated[
+        Path | None,
+        typer.Option(
+            exists=True,
+            dir_okay=False,
+            help="Use this domain list instead of the live Tranco website ranking",
+        ),
+    ] = None,
+    seed: Annotated[
+        int | None,
+        typer.Option(help="Repeat the same random website selection; omit for a new sample each run"),
+    ] = None,
     fresh: Annotated[
         bool,
         typer.Option(
@@ -79,13 +89,13 @@ def trace(
         fresh=fresh,
         nonce=fresh_nonce,
     )
+    typer.echo(f"Website source: {workload.source}")
+    typer.echo("Selected websites: " + ", ".join(workload.base_domains))
     if workload.fresh:
         typer.echo(
             f"Fresh workload nonce: {workload.nonce} "
             "(unique labels reduce normal cache hits; RA still only proves recursion capability)"
         )
-    else:
-        typer.echo("Cache state unknown; add --fresh when testing recursive resolution.")
 
     engine = TraceEngine(
         server=server,
