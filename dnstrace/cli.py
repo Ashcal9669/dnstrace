@@ -19,7 +19,7 @@ def trace(
     server: Annotated[str, typer.Option(help="DNS resolver IP address or hostname")],
     transport: Annotated[
         list[str],
-        typer.Option("--transport", "-t", help="Repeat for udp, tcp, dot, or doh"),
+        typer.Option("--transport", "-t", help="Repeat for udp, tcp, dot, doh, doq, or doh3"),
     ] = ["udp", "tcp"],
     random_count: Annotated[
         int,
@@ -40,6 +40,19 @@ def trace(
         str | None,
         typer.Option(help="Complete DoH endpoint, for example https://dns.example/dns-query"),
     ] = None,
+    doq_port: Annotated[int, typer.Option(min=1, max=65535)] = 853,
+    doq_server_name: Annotated[
+        str | None,
+        typer.Option(help="QUIC certificate hostname for DoQ; defaults to --server"),
+    ] = None,
+    doh3_url: Annotated[
+        str | None,
+        typer.Option(help="Complete DoH3 endpoint, for example https://dns.example/dns-query"),
+    ] = None,
+    doh3_bootstrap: Annotated[
+        str | None,
+        typer.Option(help="Bootstrap IP address for the DoH3 endpoint hostname"),
+    ] = None,
     insecure: Annotated[
         bool,
         typer.Option("--insecure", help="Disable TLS certificate verification"),
@@ -54,6 +67,10 @@ def trace(
         dot_port=dot_port,
         dot_server_hostname=dot_server_name,
         doh_url=doh_url,
+        doq_port=doq_port,
+        doq_server_hostname=doq_server_name,
+        doh3_url=doh3_url,
+        doh3_bootstrap_address=doh3_bootstrap,
         verify_tls=not insecure,
     )
     results = asyncio.run(engine.run(workload.domains, qtype.upper(), transport))
