@@ -10,7 +10,6 @@ from dnstrace.engine import TraceEngine
 from dnstrace.output import render_terminal, write_json
 from dnstrace.workload import build_workload
 
-
 app = typer.Typer(no_args_is_help=True, help="Trace DNS execution across multiple transports.")
 
 
@@ -18,9 +17,9 @@ app = typer.Typer(no_args_is_help=True, help="Trace DNS execution across multipl
 def trace(
     server: Annotated[str, typer.Option(help="DNS resolver IP address or hostname")],
     transport: Annotated[
-        list[str],
+        list[str] | None,
         typer.Option("--transport", "-t", help="Repeat for udp, tcp, dot, doh, doq, or doh3"),
-    ] = ["udp", "tcp"],
+    ] = None,
     random_count: Annotated[
         int,
         typer.Option("--random", min=1, help="Number of randomized domain queries"),
@@ -59,6 +58,7 @@ def trace(
     ] = False,
 ) -> None:
     """Run a randomized resolver workload over selected transports."""
+    selected_transports = transport or ["udp", "tcp"]
     workload = build_workload(random_count, domain_file=domain_file, seed=seed)
     engine = TraceEngine(
         server=server,
@@ -73,7 +73,7 @@ def trace(
         doh3_bootstrap_address=doh3_bootstrap,
         verify_tls=not insecure,
     )
-    results = asyncio.run(engine.run(workload.domains, qtype.upper(), transport))
+    results = asyncio.run(engine.run(workload.domains, qtype.upper(), selected_transports))
     render_terminal(results)
     if json_path is not None:
         write_json(results, json_path)
