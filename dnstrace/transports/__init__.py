@@ -7,11 +7,11 @@ from dnstrace.transports.tcp import TCPTransport
 from dnstrace.transports.udp import UDPTransport
 
 __all__ = [
-    "Transport",
-    "TCPTransport",
-    "UDPTransport",
-    "DoTTransport",
+    "DoH3Transport",
     "DoHTransport",
     "DoQTransport",
-    "DoH3Transport",
+    "DoTTransport",
+    "TCPTransport",
+    "Transport",
+    "UDPTransport",
 ]
