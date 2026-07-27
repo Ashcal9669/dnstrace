@@ -43,18 +43,10 @@ def _load_tranco_domains(cache_dir: Path | None = None) -> list[str]:
     return ranking.top(TRANCO_SAMPLE_SIZE)
 
 
-def build_workload(
-    count: int,
-    domain_file: Path | None = None,
-    seed: int | None = None,
-    *,
-    fresh: bool = False,
-    nonce: str | None = None,
-    source_domains: Iterable[str] | None = None,
-) -> Workload:
-    if count < 1:
-        raise ValueError("count must be at least 1")
-
+def _load_pool(
+    domain_file: Path | None,
+    source_domains: Iterable[str] | None,
+) -> tuple[list[str], str]:
     if source_domains is not None:
         pool = list(source_domains)
         source = "provided"
@@ -68,8 +60,26 @@ def build_workload(
     pool = sorted({domain.strip().lower().rstrip(".") for domain in pool if domain.strip()})
     if not pool:
         raise ValueError("domain pool is empty")
+    return pool, source
+
+
+def build_workload(
+    count: int,
+    domain_file: Path | None = None,
+    seed: int | None = None,
+    *,
+    fresh: bool = False,
+    nonce: str | None = None,
+    source_domains: Iterable[str] | None = None,
+) -> Workload:
+    if count < 1:
+        raise ValueError("count must be at least 1")
+
+    pool, source = _load_pool(domain_file, source_domains)
     if count > len(pool):
-        raise ValueError(f"requested {count} domains, but source only contains {len(pool)} unique domains")
+        raise ValueError(
+            f"requested {count} domains, but source only contains {len(pool)} unique domains"
+        )
 
     rng = random.Random(seed) if seed is not None else random.SystemRandom()
     base_domains = rng.sample(pool, count)
@@ -90,3 +100,62 @@ def build_workload(
         nonce=fresh_nonce,
         source=source,
     )
+
+
+def build_independent_workloads(
+    count: int,
+    transport_names: Iterable[str],
+    domain_file: Path | None = None,
+    seed: int | None = None,
+    *,
+    fresh: bool = False,
+    nonce: str | None = None,
+    source_domains: Iterable[str] | None = None,
+) -> dict[str, Workload]:
+    """Build one workload per transport, sampled disjointly from a shared pool.
+
+    Unlike build_workload(), no domain is ever queried by more than one
+    transport, so no transport can benefit from cache state (positive or
+    DNSSEC negative-proof) warmed by another transport's query.
+    """
+    if count < 1:
+        raise ValueError("count must be at least 1")
+
+    transport_list = list(dict.fromkeys(transport_names))
+    if not transport_list:
+        raise ValueError("at least one transport is required")
+
+    pool, source = _load_pool(domain_file, source_domains)
+    total_needed = count * len(transport_list)
+    if total_needed > len(pool):
+        raise ValueError(
+            f"requested {count} domains for each of {len(transport_list)} transports "
+            f"({total_needed} total), but source only contains {len(pool)} unique domains"
+        )
+
+    rng = random.Random(seed) if seed is not None else random.SystemRandom()
+    sampled = rng.sample(pool, total_needed)
+    fresh_nonce = _normalize_nonce(nonce or secrets.token_hex(6)) if fresh else None
+
+    workloads: dict[str, Workload] = {}
+    for position, name in enumerate(transport_list):
+        base_domains = sampled[position * count : (position + 1) * count]
+        if fresh_nonce is None:
+            workloads[name] = Workload(
+                domains=base_domains.copy(),
+                base_domains=base_domains,
+                source=source,
+            )
+        else:
+            domains = [
+                f"dnstrace-{fresh_nonce}-{name}-{index}.{base}"
+                for index, base in enumerate(base_domains)
+            ]
+            workloads[name] = Workload(
+                domains=domains,
+                base_domains=base_domains,
+                fresh=True,
+                nonce=fresh_nonce,
+                source=source,
+            )
+    return workloads

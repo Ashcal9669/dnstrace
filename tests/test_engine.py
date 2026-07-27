@@ -48,3 +48,32 @@ async def test_run_gives_each_transport_a_distinct_domain_when_fresh(
         "udp.dnstrace-abc123-0.example.com",
         "tcp.dnstrace-abc123-0.example.com",
     }
+
+
+@pytest.mark.asyncio
+async def test_run_independent_gives_each_transport_only_its_own_domains(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[tuple[str, str]] = []
+
+    async def fake_query(self, domain: str, qtype: str) -> TraceResult:
+        captured.append((self.name, domain))
+        return TraceResult(domain=domain, qtype=qtype, transport=self.name, server="192.0.2.53")
+
+    monkeypatch.setattr(UDPTransport, "query", fake_query)
+    monkeypatch.setattr(TCPTransport, "query", fake_query)
+
+    engine = TraceEngine("192.0.2.53")
+    await engine.run_independent(
+        {
+            "udp": ["udp-only-a.example.com", "udp-only-b.example.com"],
+            "tcp": ["tcp-only.example.com"],
+        },
+        "A",
+    )
+
+    assert sorted(captured) == [
+        ("tcp", "tcp-only.example.com"),
+        ("udp", "udp-only-a.example.com"),
+        ("udp", "udp-only-b.example.com"),
+    ]

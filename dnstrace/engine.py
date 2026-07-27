@@ -108,3 +108,15 @@ class TraceEngine:
             for transport in transports
         ]
         return await asyncio.gather(*tasks)
+
+    async def run_independent(
+        self,
+        domains_by_transport: dict[str, Iterable[str]],
+        qtype: str,
+    ) -> list[TraceResult]:
+        tasks = [
+            self._run_one(self._build_transport(name.lower()), domain, qtype)
+            for name, domains in domains_by_transport.items()
+            for domain in domains
+        ]
+        return await asyncio.gather(*tasks)

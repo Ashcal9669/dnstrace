@@ -8,7 +8,7 @@ import typer
 
 from dnstrace.engine import TraceEngine
 from dnstrace.output import render_terminal, write_json
-from dnstrace.workload import build_workload
+from dnstrace.workload import build_independent_workloads, build_workload
 
 app = typer.Typer(no_args_is_help=True, help="Trace DNS execution across multiple transports.")
 
@@ -57,6 +57,18 @@ def trace(
             help="Reuse the same cache-busting label across separate transport runs for comparison"
         ),
     ] = None,
+    independent: Annotated[
+        bool,
+        typer.Option(
+            "--independent",
+            help=(
+                "Give each transport its own separate batch of random websites, with no "
+                "domain shared between transports. Trades away same-site comparison across "
+                "protocols in exchange for zero cache or DNSSEC-negative-proof sharing "
+                "between them."
+            ),
+        ),
+    ] = False,
     json_path: Annotated[Path | None, typer.Option("--json", dir_okay=False)] = None,
     dot_port: Annotated[int, typer.Option(min=1, max=65535)] = 853,
     dot_server_name: Annotated[
@@ -87,22 +99,6 @@ def trace(
 ) -> None:
     """Run a randomized resolver workload over selected transports."""
     selected_transports = transport or ["udp", "tcp"]
-    workload = build_workload(
-        random_count,
-        domain_file=domain_file,
-        seed=seed,
-        fresh=fresh,
-        nonce=fresh_nonce,
-    )
-    typer.echo(f"Website source: {workload.source}")
-    typer.echo("Selected websites: " + ", ".join(workload.base_domains))
-    if workload.fresh:
-        typer.echo(
-            f"Fresh workload nonce: {workload.nonce} "
-            "(each transport queries its own label, so results are not cache hits from "
-            "another transport in this run; RA still only proves recursion capability)"
-        )
-
     engine = TraceEngine(
         server=server,
         timeout=timeout,
@@ -116,9 +112,49 @@ def trace(
         doh3_bootstrap_address=doh3_bootstrap,
         verify_tls=not insecure,
     )
-    results = asyncio.run(
-        engine.run(workload.domains, qtype.upper(), selected_transports, fresh=workload.fresh)
-    )
+
+    if independent:
+        workloads = build_independent_workloads(
+            random_count,
+            selected_transports,
+            domain_file=domain_file,
+            seed=seed,
+            fresh=fresh,
+            nonce=fresh_nonce,
+        )
+        typer.echo(f"Website source: {next(iter(workloads.values())).source}")
+        for name, workload in workloads.items():
+            typer.echo(f"  {name}: " + ", ".join(workload.base_domains))
+        typer.echo(
+            "No domain is shared between transports; each protocol resolves entirely "
+            "independent websites."
+        )
+        results = asyncio.run(
+            engine.run_independent(
+                {name: workload.domains for name, workload in workloads.items()},
+                qtype.upper(),
+            )
+        )
+    else:
+        workload = build_workload(
+            random_count,
+            domain_file=domain_file,
+            seed=seed,
+            fresh=fresh,
+            nonce=fresh_nonce,
+        )
+        typer.echo(f"Website source: {workload.source}")
+        typer.echo("Selected websites: " + ", ".join(workload.base_domains))
+        if workload.fresh:
+            typer.echo(
+                f"Fresh workload nonce: {workload.nonce} "
+                "(each transport queries its own label, so results are not cache hits from "
+                "another transport in this run; RA still only proves recursion capability)"
+            )
+        results = asyncio.run(
+            engine.run(workload.domains, qtype.upper(), selected_transports, fresh=workload.fresh)
+        )
+
     render_terminal(results)
     if json_path is not None:
         write_json(results, json_path)
