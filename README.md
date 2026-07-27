@@ -40,13 +40,15 @@ UDP and TCP:
 dnstrace trace --server 10.0.0.53 --transport udp --transport tcp --random 20
 ```
 
+These examples point at a resolver you control (`10.0.0.53`, cert hostname `resolver.example`) — swap in your own resolver's IP and hostname. There's nothing stopping you from pointing `--server` at a public resolver like `1.1.1.1`, but the whole point of dnstrace is comparing transport behaviour against a resolver you actually operate, not benchmarking someone else's edge network.
+
 DNS-over-TLS using a resolver IP with an explicit certificate hostname:
 
 ```bash
 dnstrace trace \
-  --server 1.1.1.1 \
+  --server 10.0.0.53 \
   --transport dot \
-  --dot-server-name cloudflare-dns.com \
+  --dot-server-name resolver.example \
   --random 20
 ```
 
@@ -54,9 +56,9 @@ DNS-over-HTTPS:
 
 ```bash
 dnstrace trace \
-  --server 1.1.1.1 \
+  --server 10.0.0.53 \
   --transport doh \
-  --doh-url https://cloudflare-dns.com/dns-query \
+  --doh-url https://resolver.example/dns-query \
   --random 20
 ```
 
@@ -64,9 +66,9 @@ DNS-over-QUIC:
 
 ```bash
 dnstrace trace \
-  --server 1.1.1.1 \
+  --server 10.0.0.53 \
   --transport doq \
-  --doq-server-name cloudflare-dns.com \
+  --doq-server-name resolver.example \
   --random 20
 ```
 
@@ -74,10 +76,10 @@ DNS-over-HTTP/3:
 
 ```bash
 dnstrace trace \
-  --server 1.1.1.1 \
+  --server 10.0.0.53 \
   --transport doh3 \
-  --doh3-url https://cloudflare-dns.com/dns-query \
-  --doh3-bootstrap 1.1.1.1 \
+  --doh3-url https://resolver.example/dns-query \
+  --doh3-bootstrap 10.0.0.53 \
   --random 20
 ```
 
@@ -85,18 +87,18 @@ Multiple transports in one workload:
 
 ```bash
 dnstrace trace \
-  --server 1.1.1.1 \
+  --server 10.0.0.53 \
   --transport udp \
   --transport tcp \
   --transport dot \
   --transport doh \
   --transport doq \
   --transport doh3 \
-  --dot-server-name cloudflare-dns.com \
-  --doh-url https://cloudflare-dns.com/dns-query \
-  --doq-server-name cloudflare-dns.com \
-  --doh3-url https://cloudflare-dns.com/dns-query \
-  --doh3-bootstrap 1.1.1.1 \
+  --dot-server-name resolver.example \
+  --doh-url https://resolver.example/dns-query \
+  --doq-server-name resolver.example \
+  --doh3-url https://resolver.example/dns-query \
+  --doh3-bootstrap 10.0.0.53 \
   --random 20 \
   --json report.json
 ```
