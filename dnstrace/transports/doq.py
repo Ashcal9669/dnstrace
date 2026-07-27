@@ -8,6 +8,7 @@ import dns.flags
 import dns.message
 import dns.quic
 import dns.rcode
+from dns.quic._common import UnexpectedEOF
 
 from dnstrace.dns_response import extract_answers
 from dnstrace.models import TraceResult
@@ -67,7 +68,7 @@ class DoQTransport(Transport):
             result.rcode = dns.rcode.to_text(response.rcode())
             result.flags = dns.flags.to_text(response.flags).split()
             result.answers = extract_answers(response, qtype)
-        except (TimeoutError, OSError, dns.exception.DNSException) as exc:
+        except (TimeoutError, OSError, dns.exception.DNSException, UnexpectedEOF) as exc:
             result.error = f"{type(exc).__name__}: {exc}"
             result.event("query.error", error=result.error)
         finally:

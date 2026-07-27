@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ssl
+import urllib.parse
 
 import dns.asyncquery
 import dns.exception
@@ -9,6 +10,7 @@ import dns.message
 import dns.query
 import dns.quic
 import dns.rcode
+from dns.quic._common import UnexpectedEOF
 
 from dnstrace.dns_response import extract_answers
 from dnstrace.models import TraceResult
@@ -43,6 +45,7 @@ class DoH3Transport(Transport):
         result.event("query.build")
         message = dns.message.make_query(domain, qtype, want_dnssec=True)
         target = self.bootstrap_address or self.server
+        hostname = urllib.parse.urlparse(self.url).hostname or self.server
 
         try:
             result.event(
@@ -55,7 +58,7 @@ class DoH3Transport(Transport):
             verify_mode = ssl.CERT_REQUIRED if self.verify else ssl.CERT_NONE
             async with dns.quic.AsyncioQuicManager(
                 verify_mode=verify_mode,
-                server_name=self.server,
+                server_name=hostname,
                 h3=True,
             ) as manager:
                 connection = manager.connect(target, self.port)
@@ -76,7 +79,13 @@ class DoH3Transport(Transport):
             result.rcode = dns.rcode.to_text(response.rcode())
             result.flags = dns.flags.to_text(response.flags).split()
             result.answers = extract_answers(response, qtype)
-        except (TimeoutError, OSError, ValueError, dns.exception.DNSException) as exc:
+        except (
+            TimeoutError,
+            OSError,
+            ValueError,
+            dns.exception.DNSException,
+            UnexpectedEOF,
+        ) as exc:
             result.error = f"{type(exc).__name__}: {exc}"
             result.event("query.error", error=result.error)
         finally:
