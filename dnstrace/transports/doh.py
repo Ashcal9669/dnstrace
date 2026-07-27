@@ -76,7 +76,13 @@ class DoHTransport(Transport):
                 )
                 response_wire = response.content
             result.event("https.response")
-            response_message = dns.message.from_wire(response_wire)
+            try:
+                response_message = dns.message.from_wire(response_wire)
+            except dns.exception.DNSException as exc:
+                raise ValueError(
+                    f"{self.url} returned a 2xx status but a non-DNS response body "
+                    f"({len(response_wire)} bytes): {response_wire[:100]!r}"
+                ) from exc
             result.success = True
             result.rcode = dns.rcode.to_text(response_message.rcode())
             result.flags = dns.flags.to_text(response_message.flags).split()
