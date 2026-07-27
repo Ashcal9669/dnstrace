@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+from typing import Self
+
 import dns.message
 import dns.query
 import pytest
@@ -7,6 +10,28 @@ import pytest
 from dnstrace.engine import TraceEngine
 from dnstrace.transports.doh3 import DoH3Transport
 from dnstrace.transports.doq import DoQTransport
+
+
+class _FakeQuicConnection:
+    def __init__(self, alpn: str) -> None:
+        self._connection = SimpleNamespace(tls=SimpleNamespace(alpn_negotiated=alpn))
+
+
+def _fake_manager_factory(alpn: str) -> type:
+    class _FakeManager:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def connect(self, address: str, port: int, source=None, source_port=0):
+            return _FakeQuicConnection(alpn)
+
+        async def __aenter__(self) -> Self:
+            return self
+
+        async def __aexit__(self, *exc_info: object) -> bool:
+            return False
+
+    return _FakeManager
 
 
 @pytest.mark.asyncio
@@ -18,6 +43,9 @@ async def test_doq_query_records_quic_timeline(monkeypatch: pytest.MonkeyPatch) 
         return dns.message.make_response(message)
 
     monkeypatch.setattr("dns.asyncquery.quic", fake_quic)
+    monkeypatch.setattr(
+        "dnstrace.transports.doq.dns.quic.AsyncioQuicManager", _fake_manager_factory("doq")
+    )
     transport = DoQTransport(
         "192.0.2.53",
         port=8853,
@@ -32,7 +60,7 @@ async def test_doq_query_records_quic_timeline(monkeypatch: pytest.MonkeyPatch) 
     assert captured["where"] == "192.0.2.53"
     assert captured["port"] == 8853
     assert captured["server_hostname"] == "resolver.example"
-    assert captured["verify"] is False
+    assert result.protocol == {"alpn": "doq", "tls_version": "TLSv1.3"}
     assert [event.name for event in result.events] == [
         "query.build",
         "quic.handshake.start",
@@ -50,6 +78,9 @@ async def test_doh3_forces_http3(monkeypatch: pytest.MonkeyPatch) -> None:
         return dns.message.make_response(message)
 
     monkeypatch.setattr("dns.asyncquery.https", fake_https)
+    monkeypatch.setattr(
+        "dnstrace.transports.doh3.dns.quic.AsyncioQuicManager", _fake_manager_factory("h3")
+    )
     transport = DoH3Transport(
         "dns.example",
         url="https://dns.example/dns-query",
@@ -63,6 +94,7 @@ async def test_doh3_forces_http3(monkeypatch: pytest.MonkeyPatch) -> None:
     assert captured["where"] == "https://dns.example/dns-query"
     assert captured["bootstrap_address"] == "192.0.2.53"
     assert captured["http_version"] is dns.query.HTTPVersion.H3
+    assert result.protocol == {"alpn": "h3", "tls_version": "TLSv1.3"}
     assert [event.name for event in result.events] == [
         "query.build",
         "http3.request.start",

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import socket
 import ssl
 
+import dns.asyncbackend
 import dns.asyncquery
 import dns.exception
 import dns.flags
+import dns.inet
 import dns.message
 import dns.rcode
 
+from dnstrace.dns_response import extract_answers
 from dnstrace.models import TraceResult
 from dnstrace.transports.base import Transport
 
@@ -55,20 +59,40 @@ class DoTTransport(Transport):
                 server_hostname=self.server_hostname,
                 verify=self.verify,
             )
-            response = await dns.asyncquery.tls(
-                message,
-                self.server,
-                port=self.port,
-                timeout=self.timeout,
-                ssl_context=context,
-                server_hostname=self.server_hostname,
+            backend = dns.asyncbackend.get_default_backend()
+            af = dns.inet.af_for_address(self.server)
+            connected_socket = await backend.make_socket(
+                af,
+                socket.SOCK_STREAM,
+                0,
+                None,
+                (self.server, self.port),
+                self.timeout,
+                context,
+                self.server_hostname,
             )
-            result.event("tls.handshake.complete")
+            async with connected_socket as sock:
+                ssl_object = sock.writer.get_extra_info("ssl_object")
+                cipher = ssl_object.cipher() if ssl_object else None
+                result.evidence(
+                    tls_version=ssl_object.version() if ssl_object else "unknown",
+                    cipher=cipher[0] if cipher else "unknown",
+                    alpn=(ssl_object.selected_alpn_protocol() if ssl_object else None) or "none",
+                )
+                result.event("tls.handshake.complete")
+                response = await dns.asyncquery.tls(
+                    message,
+                    self.server,
+                    port=self.port,
+                    timeout=self.timeout,
+                    sock=sock,
+                    server_hostname=self.server_hostname,
+                )
             result.event("dns.receive", message_id=response.id)
             result.success = True
             result.rcode = dns.rcode.to_text(response.rcode())
             result.flags = dns.flags.to_text(response.flags).split()
-            result.answers = [item.to_text() for rrset in response.answer for item in rrset]
+            result.answers = extract_answers(response, qtype)
         except (TimeoutError, OSError, ssl.SSLError, dns.exception.DNSException) as exc:
             result.error = f"{type(exc).__name__}: {exc}"
             result.event("query.error", error=result.error)

@@ -17,6 +17,7 @@ class UDPTransport(Transport):
     async def query(self, domain: str, qtype: str) -> TraceResult:
         result = TraceResult(domain=domain, qtype=qtype, transport=self.name, server=self.server)
         result.event("query.build")
+        result.evidence(protocol="plaintext")
         message = dns.message.make_query(domain, qtype, want_dnssec=True)
         try:
             result.event("udp.send", server=self.server, port=self.port)

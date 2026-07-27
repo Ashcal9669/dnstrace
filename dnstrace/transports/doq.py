@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import ssl
+
 import dns.asyncquery
 import dns.exception
 import dns.flags
 import dns.message
+import dns.quic
 import dns.rcode
 
+from dnstrace.dns_response import extract_answers
 from dnstrace.models import TraceResult
 from dnstrace.transports.base import Transport
 
@@ -41,20 +45,28 @@ class DoQTransport(Transport):
                 server_hostname=self.server_hostname,
                 verify=self.verify,
             )
-            response = await dns.asyncquery.quic(
-                message,
-                self.server,
-                port=self.port,
-                timeout=self.timeout,
-                verify=self.verify,
-                server_hostname=self.server_hostname,
-            )
+            verify_mode = ssl.CERT_REQUIRED if self.verify else ssl.CERT_NONE
+            async with dns.quic.AsyncioQuicManager(
+                verify_mode=verify_mode,
+                server_name=self.server_hostname,
+            ) as manager:
+                connection = manager.connect(self.server, self.port)
+                response = await dns.asyncquery.quic(
+                    message,
+                    self.server,
+                    port=self.port,
+                    timeout=self.timeout,
+                    connection=connection,
+                    server_hostname=self.server_hostname,
+                )
+                alpn = connection._connection.tls.alpn_negotiated
+            result.evidence(alpn=alpn or "none", tls_version="TLSv1.3")
             result.event("quic.handshake.complete")
             result.event("quic.stream.receive", message_id=response.id)
             result.success = True
             result.rcode = dns.rcode.to_text(response.rcode())
             result.flags = dns.flags.to_text(response.flags).split()
-            result.answers = [item.to_text() for rrset in response.answer for item in rrset]
+            result.answers = extract_answers(response, qtype)
         except (TimeoutError, OSError, dns.exception.DNSException) as exc:
             result.error = f"{type(exc).__name__}: {exc}"
             result.event("query.error", error=result.error)

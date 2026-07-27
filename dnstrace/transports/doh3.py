@@ -1,18 +1,22 @@
 from __future__ import annotations
 
+import ssl
+
 import dns.asyncquery
 import dns.exception
 import dns.flags
 import dns.message
 import dns.query
+import dns.quic
 import dns.rcode
 
+from dnstrace.dns_response import extract_answers
 from dnstrace.models import TraceResult
 from dnstrace.transports.base import Transport
 
 
 class DoH3Transport(Transport):
-    """DNS-over-HTTPS over HTTP/3 using QUIC."""
+    """DNS-over-HTTPS over HTTP/3."""
 
     name = "doh3"
 
@@ -38,6 +42,7 @@ class DoH3Transport(Transport):
         result = TraceResult(domain=domain, qtype=qtype, transport=self.name, server=self.server)
         result.event("query.build")
         message = dns.message.make_query(domain, qtype, want_dnssec=True)
+        target = self.bootstrap_address or self.server
 
         try:
             result.event(
@@ -47,20 +52,30 @@ class DoH3Transport(Transport):
                 bootstrap_address=self.bootstrap_address,
                 verify=self.verify,
             )
-            response = await dns.asyncquery.https(
-                message,
-                self.url,
-                timeout=self.timeout,
-                verify=self.verify,
-                post=self.post,
-                bootstrap_address=self.bootstrap_address,
-                http_version=dns.query.HTTPVersion.H3,
-            )
+            verify_mode = ssl.CERT_REQUIRED if self.verify else ssl.CERT_NONE
+            async with dns.quic.AsyncioQuicManager(
+                verify_mode=verify_mode,
+                server_name=self.server,
+                h3=True,
+            ) as manager:
+                connection = manager.connect(target, self.port)
+                response = await dns.asyncquery.https(
+                    message,
+                    self.url,
+                    timeout=self.timeout,
+                    verify=self.verify,
+                    post=self.post,
+                    bootstrap_address=self.bootstrap_address,
+                    http_version=dns.query.HTTPVersion.H3,
+                    client=connection,
+                )
+                alpn = connection._connection.tls.alpn_negotiated
+            result.evidence(alpn=alpn or "none", tls_version="TLSv1.3")
             result.event("http3.response", message_id=response.id)
             result.success = True
             result.rcode = dns.rcode.to_text(response.rcode())
             result.flags = dns.flags.to_text(response.flags).split()
-            result.answers = [item.to_text() for rrset in response.answer for item in rrset]
+            result.answers = extract_answers(response, qtype)
         except (TimeoutError, OSError, ValueError, dns.exception.DNSException) as exc:
             result.error = f"{type(exc).__name__}: {exc}"
             result.event("query.error", error=result.error)
