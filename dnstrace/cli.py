@@ -96,6 +96,17 @@ def trace(
         bool,
         typer.Option("--insecure", help="Disable TLS certificate verification"),
     ] = False,
+    doh_get: Annotated[
+        bool,
+        typer.Option(
+            "--doh-get",
+            help=(
+                "Use HTTP GET instead of POST for DoH and DoH3. Some minimal DoH "
+                "servers (for example router-based encrypted DNS proxies) only "
+                "support the GET form of RFC 8484 and reject POST with 405/400."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Run a randomized resolver workload over selected transports."""
     selected_transports = transport or ["udp", "tcp"]
@@ -111,6 +122,7 @@ def trace(
         doh3_url=doh3_url,
         doh3_bootstrap_address=doh3_bootstrap,
         verify_tls=not insecure,
+        doh_get=doh_get,
     )
 
     if independent:

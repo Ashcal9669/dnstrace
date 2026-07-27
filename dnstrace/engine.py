@@ -37,6 +37,7 @@ class TraceEngine:
         doh3_url: str | None = None,
         doh3_bootstrap_address: str | None = None,
         verify_tls: bool = True,
+        doh_get: bool = False,
     ) -> None:
         self.server = server
         self.timeout = timeout
@@ -49,6 +50,7 @@ class TraceEngine:
         self.doh3_url = doh3_url
         self.doh3_bootstrap_address = doh3_bootstrap_address
         self.verify_tls = verify_tls
+        self.doh_get = doh_get
 
     def _build_transport(self, name: str) -> Transport:
         if name == "dot":
@@ -65,6 +67,7 @@ class TraceEngine:
                 timeout=self.timeout,
                 url=self.doh_url,
                 verify=self.verify_tls,
+                post=not self.doh_get,
             )
         if name == "doq":
             return DoQTransport(
@@ -81,6 +84,7 @@ class TraceEngine:
                 url=self.doh3_url,
                 bootstrap_address=self.doh3_bootstrap_address,
                 verify=self.verify_tls,
+                post=not self.doh_get,
             )
         try:
             cls = TRANSPORTS[name]
