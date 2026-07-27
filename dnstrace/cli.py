@@ -37,13 +37,18 @@ def trace(
     ] = None,
     seed: Annotated[
         int | None,
-        typer.Option(help="Repeat the same random website selection; omit for a new sample each run"),
+        typer.Option(
+            help="Repeat the same random website selection; omit for a new sample each run"
+        ),
     ] = None,
     fresh: Annotated[
         bool,
         typer.Option(
             "--fresh",
-            help="Prefix each selected domain with a unique label to avoid ordinary positive cache hits",
+            help=(
+                "Give each domain a unique label, and each transport its own copy of that "
+                "label, so no transport can serve a cache hit warmed by another transport's query"
+            ),
         ),
     ] = False,
     fresh_nonce: Annotated[
@@ -94,7 +99,8 @@ def trace(
     if workload.fresh:
         typer.echo(
             f"Fresh workload nonce: {workload.nonce} "
-            "(unique labels reduce normal cache hits; RA still only proves recursion capability)"
+            "(each transport queries its own label, so results are not cache hits from "
+            "another transport in this run; RA still only proves recursion capability)"
         )
 
     engine = TraceEngine(
@@ -110,7 +116,9 @@ def trace(
         doh3_bootstrap_address=doh3_bootstrap,
         verify_tls=not insecure,
     )
-    results = asyncio.run(engine.run(workload.domains, qtype.upper(), selected_transports))
+    results = asyncio.run(
+        engine.run(workload.domains, qtype.upper(), selected_transports, fresh=workload.fresh)
+    )
     render_terminal(results)
     if json_path is not None:
         write_json(results, json_path)

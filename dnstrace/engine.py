@@ -98,10 +98,12 @@ class TraceEngine:
         domains: Iterable[str],
         qtype: str,
         transport_names: Iterable[str],
+        *,
+        fresh: bool = False,
     ) -> list[TraceResult]:
         transports = [self._build_transport(name.lower()) for name in transport_names]
         tasks = [
-            self._run_one(transport, domain, qtype)
+            self._run_one(transport, f"{transport.name}.{domain}" if fresh else domain, qtype)
             for domain in domains
             for transport in transports
         ]
